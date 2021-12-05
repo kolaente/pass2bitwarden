@@ -86,8 +86,15 @@ func buildEntry(fname string, out []byte) entry {
 		entryType = "totp"
 	}
 
+	// Handle passwords that are stored on the 'root' of the directory.
+	if len(folder) == 1 {
+		folder = "/"
+	} else {
+		folder = folder[1 : len(folder)-1]
+	}
+
 	return entry{
-		Folder:        folder[1 : len(folder)-1],
+		Folder:        folder,
 		Name:          name[:len(name)-4],
 		Type:          entryType,
 		LoginURI:      url,
