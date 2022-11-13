@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"io"
 	"os"
 	"os/exec"
@@ -57,30 +58,33 @@ func pop(m map[string]string, key string) string {
 func buildEntry(fname string, out []byte) entry {
 	folder, name := filepath.Split(fname)
 	lines := strings.Split(string(out), "\n")
-	// lines := []string{"test"}
 	password := lines[0]
-	kv := make(map[string]string)
-	for i, line := range lines[1:] {
-		if len(line) == 0 || line == "" {
-			continue
-		}
-		entry := strings.SplitN(line, ":", 2)
-		if len(entry) != 2 {
-			fmt.Fprintf(os.Stderr, "%s:%d not a key-value field '%s'\n", fname, i+2, line)
-			continue
-		}
 
-		kv[entry[0]] = strings.TrimSpace(entry[1])
+	content := lines[1:]
+	if len(lines) > 1 && (lines[1] == "--" || lines[1] == "---") {
+		content = lines[2:]
 	}
 
-	username := pop(kv, "login")
-	url := pop(kv, "url")
+	fields := make(map[string]string)
+	err := yaml.Unmarshal([]byte(strings.Join(content, "\n")), &fields)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not parse content of password %s: %s\n", fname, err)
+	}
+
+	username, has := fields["login"]
+	if !has {
+		username = fields["username"]
+	}
+	pop(fields, "login")
+	pop(fields, "username")
+
+	url := pop(fields, "url")
 	if url == "" {
-		url = pop(kv, "http")
+		url = pop(fields, "http")
 	} else {
-		delete(kv, "http")
+		delete(fields, "http")
 	}
-	totp := pop(kv, "totp")
+	totp := pop(fields, "totp")
 	entryType := "login"
 	if totp != "" {
 		entryType = "totp"
@@ -98,7 +102,7 @@ func buildEntry(fname string, out []byte) entry {
 		Name:          name[:len(name)-4],
 		Type:          entryType,
 		LoginURI:      url,
-		Fields:        mapString{kv},
+		Fields:        mapString{fields},
 		LoginUsername: username,
 		LoginPassword: password,
 		LoginTOTP:     totp,
